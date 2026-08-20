@@ -1,0 +1,50 @@
+project: Quant-Research-SearchAttention
+
+data:
+  start_date: "20200101"   # 回测数据起始日
+  end_date: ""             # 留空 = 最新交易日
+  cache_dir: data/cache
+  raw_dir: data/raw
+  search_index_dir: data/search_index   # 放置真实搜索指数 CSV:{ticker}.csv, 列 [date, index]
+
+universe:
+  index_code: "000300"     # 沪深300成分股池
+
+search_index:
+  mode: auto               # auto = 有真实CSV用真实, 否则合成; real = 强制真实; synthetic = 强制合成
+  synthetic_seed: 42
+  real_file_date_col: date
+  real_file_index_col: index
+
+attention:
+  gdhs_span: 4             # 股东户数因子窗口: 最近N期累计变化(4期≈一年, 诊断最优)
+
+factors:
+  weighting: ic_adaptive   # fixed=固定权重; ic_adaptive=按过去窗口样本外IC自适应加权(无未来函数)
+  ic_weight_window: 12     # ic_adaptive 的滚动IC窗口(换仓期数)
+  ic_weight_mode: ic_ir    # ic=IC均值加权; ic_ir=IC均值/IC标准差(对波动大的因子降权, 更稳健)
+  neutralize: false        # 行业/规模中性化: 诊断显示本策略alpha主要来自风格/行业暴露, 开启后年化降至约4%, 默认关
+  # direction: 因子值乘以此方向后, 越大预期未来收益越高
+  min_valid_ratio: 0.5     # 单只股票可用因子比例低于该值时不参与选股
+  entries:
+    search_heat:       {weight: 0.28, direction: +1, desc: "搜索热度水平: log(SI) 相对自身60日均值的偏离"}
+    search_mom:        {weight: 0.10, direction: +1, desc: "搜索热度动量: 20日 log(SI) 变化"}
+    attn_price_div:    {weight: 0.12, direction: +1, desc: "关注-价格背离: 热度上升但价格未动的股票"}
+    mom_12_1:          {weight: 0.15, direction: +1, desc: "中期动量: t-252 至 t-21 收益"}
+    rev_5:             {weight: 0.10, direction: -1, desc: "短期反转: 近5日收益(取负)"}
+    low_vol_20:        {weight: 0.10, direction: -1, desc: "低波动: 20日收益标准差(取负)"}
+    volume_ratio:      {weight: 0.05, direction: -1, desc: "量能相对收缩: 5日均量/60日均量(取负)"}
+    amihud:            {weight: 0.10, direction: +1, desc: "Amihud非流动性: |ret|/成交额"}
+    # 真实关注度代理 (需先运行 scripts/fetch_attention.py, 无缓存时自动跳过)
+    lhb_heat:          {weight: 0.08, direction: -1, desc: "龙虎榜关注热度: 上榜事件指数衰减强度(过热反转)"}
+    lhb_net_buy:       {weight: 0.06, direction: +1, desc: "龙虎榜净买入强度: 净买额指数衰减均值"}
+    gdhs_change:       {weight: 0.10, direction: -1, desc: "股东户数近一年累计变化: 增加=散户化/关注度上升(取负)"}
+
+backtest:
+  top_n: 30                # 每期持仓数量(等权)
+  rebalance: month_end     # 月末换仓, 信号用T日收盘, T+1日开盘成交
+  cost_bps_one_way: 15     # 单边交易成本(佣金+印花税+滑点), 万分之15
+  min_history_days: 120    # 上市/数据不足N日的不参与选股
+  buffer_ratio: 0.3        # 换手缓冲带: 原持仓排名仍在 top_n*(1+该值) 内不卖出
+  limit_check: true        # 涨跌停不可成交: 开盘即涨停不买/开盘即跌停不卖
+  quantiles: 5             # 分层测试组数

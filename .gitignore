@@ -1,0 +1,8 @@
+data/cache/
+data/raw/
+data/search_index/
+results/
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
